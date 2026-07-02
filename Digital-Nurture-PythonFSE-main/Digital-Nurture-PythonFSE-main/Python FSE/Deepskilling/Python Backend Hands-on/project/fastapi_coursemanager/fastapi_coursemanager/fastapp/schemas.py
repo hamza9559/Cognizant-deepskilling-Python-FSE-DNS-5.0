@@ -30,6 +30,10 @@ class StudentResponse(StudentBase):
     class Config:
         from_attributes = True
 
+# --- NESTED RELATIONSHIP RESPONSE (Hands-On 8) ---
+class CourseDetailResponse(CourseResponse):
+    enrolled_students: List[StudentResponse] = []
+
 # --- ENROLLMENT SCHEMAS ---
 class EnrollmentBase(BaseModel):
     student_id: int
@@ -43,3 +47,18 @@ class EnrollmentResponse(EnrollmentBase):
     enrollment_date: datetime
     class Config:
         from_attributes = True
+
+# --- USER & AUTH SCHEMAS (Hands-On 10) ---
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str

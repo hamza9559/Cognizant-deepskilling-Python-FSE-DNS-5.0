@@ -1,162 +1,166 @@
 from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks, Response
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List, Optional
+from datetime import datetime, timedelta
 import time
+import jwt
+from passlib.context import CryptContext
 
 from fastapp.database import engine, Base, get_db
-from fastapp.models import Course, Student, Enrollment
+from fastapp.models import Course, Student, Enrollment, User
 from fastapp.schemas import (
-    CourseCreate, CourseResponse,
+    CourseCreate, CourseResponse, CourseDetailResponse,
     StudentCreate, StudentResponse,
-    EnrollmentCreate, EnrollmentResponse
+    EnrollmentCreate, EnrollmentResponse,
+    UserCreate, UserResponse, Token
 )
 
-# 1. Custom OpenAPI Metadata Configuration Branding (Step 75)
+# --- SECURITY UTILITIES (Hands-On 10) ---
+SECRET_KEY = "SUPER_SECRET_COMPLIANCE_KEY_2026"
+ALGORITHM = "HS256"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token")
+
 app = FastAPI(
     title="Course Management System",
-    description="High-performance backend engine powered by FastAPI & Async SQLAlchemy",
-    version="2.5.0",
-    contact={
-        "name": "Academic Support Operations",
-        "email": "backend-ops@saveetha.edu.in",
-    }
+    description="Production-Grade Backend Architecture with Auth and Seeding Engine",
+    version="3.0.0"
 )
 
-# Async DB Auto-generation Hook
 @app.on_event("startup")
 async def startup_event():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    # --- AUTOMATED DATA SEEDING (Hands-On 8) ---
+    async with AsyncSession(engine) as session:
+        course_check = await session.execute(select(Course))
+        if not course_check.scalars().first():
+            # Seed Base Courses
+            c1 = Course(name="Asynchronous Programming", code="CS401", credits=4, department_id=1)
+            c2 = Course(name="Microservice Architecture", code="CS402", credits=3, department_id=1)
+            session.add_all([c1, c2])
+            
+            # Seed Administration User profile (password: admin123)
+            admin_user = User(username="admin", hashed_password=pwd_context.hash("admin123"))
+            session.add(admin_user)
+            
+            await session.commit()
 
-
-# --- BACKGROUND TASK WORKER ENGINE (Step 73) ---
 def send_confirmation_email(student_email: str):
-    # Simulating long-running I/O operation
-    time.sleep(2) 
+    time.sleep(1)
     print(f"\n[BACKGROUND WORKER] Sending confirmation to {student_email} -- SUCCESS\n")
 
+# --- AUTH HELPER DEPENDENCY ---
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalars().first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
 
 # =====================================================================
-# 🟩 1. COURSES ROUTING COMPONENT ENGINE
+# 🔐 AUTHENTICATION ENDPOINTS (Hands-On 10)
 # =====================================================================
 
-@app.get("/api/courses/", response_model=List[CourseResponse], status_code=status.HTTP_200_OK, tags=["Courses"])
-async def get_all_courses(limit: int = 10, department_id: Optional[int] = None, db: AsyncSession = Depends(get_db)):
-    query = select(Course)
-    if department_id is not None:
-        query = query.where(Course.department_id == department_id)
-    result = await db.execute(query.limit(limit))
+@app.post("/api/auth/register", response_model=UserResponse, status_code=201, tags=["Authentication"])
+async def register_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(select(User).where(User.username == user_in.username))
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="Username already registered")
+    new_user = User(username=user_in.username, hashed_password=pwd_context.hash(user_in.password))
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    return new_user
+
+@app.post("/api/auth/token", response_model=Token, tags=["Authentication"])
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.username == form_data.username))
+    user = result.scalars().first()
+    if not user or not pwd_context.verify(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    
+    token_data = {"sub": user.username, "exp": datetime.utcnow() + timedelta(minutes=30)}
+    encoded_jwt = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+    return {"access_token": encoded_jwt, "token_type": "bearer"}
+
+
+# =====================================================================
+# 📚 COURSES MANAGEMENT & RELATIONSHIPS (Hands-On 8)
+# =====================================================================
+
+@app.get("/api/courses/", response_model=List[CourseResponse], tags=["Courses"])
+async def get_all_courses(limit: int = 10, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Course).limit(limit))
     return result.scalars().all()
 
-
-@app.post("/api/courses/", response_model=CourseResponse, status_code=status.HTTP_201_CREATED, 
-          tags=["Courses"], summary="Create a new course catalog record", response_description="The newly mapped course data record")
-async def create_course(course: CourseCreate, db: AsyncSession = Depends(get_db)):
+# SECURED POST ENDPOINT via dependency injection gate (Hands-On 10)
+@app.post("/api/courses/", response_model=CourseResponse, status_code=201, tags=["Courses"])
+async def create_course(course: CourseCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     code_check = await db.execute(select(Course).where(Course.code == course.code))
     if code_check.scalars().first():
-        raise HTTPException(status_code=400, detail=f"Course code {course.code} already exists.")
-    
+        raise HTTPException(status_code=400, detail="Course code already exists.")
     db_course = Course(**course.model_dump())
     db.add(db_course)
     await db.commit()
     await db.refresh(db_course)
     return db_course
 
-
-@app.get("/api/courses/{course_id}", response_model=CourseResponse, tags=["Courses"])
-async def get_course_by_id(course_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Course).where(Course.id == course_id))
-    course = result.scalars().first()
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    return course
-
-
-@app.put("/api/courses/{course_id}", response_model=CourseResponse, tags=["Courses"])
-async def update_course(course_id: int, updated_data: CourseCreate, db: AsyncSession = Depends(get_db)):
+# NESTED SERIALIZATION ROUTE LOOKUP (Hands-On 8)
+@app.get("/api/courses/{course_id}/detailed", response_model=CourseDetailResponse, tags=["Courses"])
+async def get_course_details_nested(course_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Course).where(Course.id == course_id))
     course = result.scalars().first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     
-    for key, val in updated_data.model_dump().items():
-        setattr(course, key, val)
-        
-    await db.commit()
-    await db.refresh(course)
-    return course
-
-
-@app.delete("/api/courses/{course_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Courses"])
-async def delete_course(course_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Course).where(Course.id == course_id))
-    course = result.scalars().first()
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    # Extract structural items cleanly through join relationship proxy attributes
+    students = [e.student for e in course.enrollments]
     
-    await db.delete(course)
-    await db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-# RELATIONAL RELATIONAL JOIN QUERY ROUTE (Step 71)
-@app.get("/api/courses/{course_id}/students/", response_model=List[StudentResponse], tags=["Courses"])
-async def get_enrolled_students(course_id: int, db: AsyncSession = Depends(get_db)):
-    course_check = await db.execute(select(Course).where(Course.id == course_id))
-    if not course_check.scalars().first():
-        raise HTTPException(status_code=404, detail="Course not found")
-
-    query = select(Student).join(Enrollment, Student.id == Enrollment.student_id).where(Enrollment.course_id == course_id)
-    result = await db.execute(query)
-    return result.scalars().all()
+    return {
+        "id": course.id,
+        "name": course.name,
+        "code": course.code,
+        "credits": course.credits,
+        "department_id": course.department_id,
+        "enrolled_students": students
+    }
 
 
 # =====================================================================
-# 🟩 2. STUDENTS ROUTING COMPONENT ENGINE
+# 🎓 STUDENTS & ENROLLMENTS ROUTERS
 # =====================================================================
 
-@app.get("/api/students/", response_model=List[StudentResponse], tags=["Students"])
-async def get_all_students(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Student))
-    return result.scalars().all()
-
-
-@app.post("/api/students/", response_model=StudentResponse, status_code=status.HTTP_201_CREATED, tags=["Students"])
+@app.post("/api/students/", response_model=StudentResponse, status_code=201, tags=["Students"])
 async def create_student(student: StudentCreate, db: AsyncSession = Depends(get_db)):
-    email_check = await db.execute(select(Student).where(Student.email == student.email))
-    if email_check.scalars().first():
-        raise HTTPException(status_code=400, detail="Email matching this identification profile already exists.")
-        
     db_student = Student(**student.model_dump())
     db.add(db_student)
     await db.commit()
     await db.refresh(db_student)
     return db_student
 
-
-# =====================================================================
-# 🟩 3. ENROLLMENTS ROUTING COMPONENT ENGINE
-# =====================================================================
-
-@app.post("/api/enrollments/", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED, tags=["Enrollments"])
-async def create_enrollment(
-    enrollment: EnrollmentCreate, 
-    background_tasks: BackgroundTasks, 
-    db: AsyncSession = Depends(get_db)
-):
-    # Verify both models exist prior to relationship assembly
+@app.post("/api/enrollments/", response_model=EnrollmentResponse, status_code=201, tags=["Enrollments"])
+async def create_enrollment(enrollment: EnrollmentCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     student = (await db.execute(select(Student).where(Student.id == enrollment.student_id))).scalars().first()
     course = (await db.execute(select(Course).where(Course.id == enrollment.course_id))).scalars().first()
     if not student or not course:
-        raise HTTPException(status_code=404, detail="Target student or course reference identifier not found.")
-
+        raise HTTPException(status_code=404, detail="Student or course profile target not found.")
+    
     db_enrollment = Enrollment(**enrollment.model_dump())
     db.add(db_enrollment)
     await db.commit()
     await db.refresh(db_enrollment)
-
-    # Dispatch non-blocking transaction to thread workers instantly (Step 73)
     background_tasks.add_task(send_confirmation_email, student.email)
-
     return db_enrollment
