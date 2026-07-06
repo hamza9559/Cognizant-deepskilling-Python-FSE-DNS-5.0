@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Portal - ES6 & DOM</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <span>Student Portal</span>
+        </div>
+        <div class="hamburger">&#9776;</div>
+        <nav>
+            <ul>
+                <li><a href="#home" class="active">Home</a></li>
+                <li><a href="#courses">Courses</a></li>
+                <li><a href="#profile">Profile</a></li>
+                <li><a href="#grades">Grades</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="hero">
+            <h1>Welcome to the Student Portal</h1>
+            <p>Your central hub for managing your courses, grades, profile, and academic progress. Explore our rich catalog of courses and accelerate your learning journey today.</p>
+            <button type="button">Explore Courses</button>
+        </section>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">Courses Enrolled</span>
+                <span class="stat-value">5</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">GPA</span>
+                <span class="stat-value">3.8</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Semester</span>
+                <span class="stat-value">6</span>
+            </div>
+        </div>
+
+        <!-- Selected Course Detail Area -->
+        <div id="selected-course-section" class="hidden">
+            <h3>Selected Course Details</h3>
+            <div id="selected-course-card">
+                <!-- Dynamically loaded -->
+            </div>
+        </div>
+
+        <section id="courses">
+            <div class="section-header">
+                <h2>Featured Courses</h2>
+                <div class="controls">
+                    <input type="text" id="search-courses" placeholder="Search courses by name...">
+                    <button type="button" id="sort-courses">Sort by Credits</button>
+                </div>
+            </div>
+
+            <!-- Empty container to be filled dynamically -->
+            <div class="course-grid"></div>
+
+            <div class="courses-summary">
+                <p id="total-credits">Total Credits Enrolled: 0</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 Student Portal. All rights reserved.</p>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

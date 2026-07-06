@@ -1,0 +1,70 @@
+<div class="profile-section">
+    <h3>Student Profile (Reactive Form)</h3>
+    
+    <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="profile-form">
+        <!-- Name Field -->
+        <div class="form-group">
+            <label htmlFor="name-input">Full Name</label>
+            <input 
+                type="text" 
+                id="name-input" 
+                formControlName="name"
+                class="form-control"
+                [class.invalid-field]="nameControl?.touched && nameControl?.invalid"
+            />
+            <div class="error-msg" *ngIf="nameControl?.touched && nameControl?.errors?.['required']">
+                Name is required
+            </div>
+        </div>
+
+        <!-- Email Field -->
+        <div class="form-group">
+            <label htmlFor="email-input">Email Address</label>
+            <input 
+                type="email" 
+                id="email-input" 
+                formControlName="email"
+                class="form-control"
+                [class.invalid-field]="emailControl?.touched && emailControl?.invalid"
+            />
+            <div class="error-msg" *ngIf="emailControl?.touched && emailControl?.invalid">
+                <span *ngIf="emailControl?.errors?.['required']">Email is required</span>
+                <span *ngIf="emailControl?.errors?.['email']">Enter a valid email</span>
+            </div>
+        </div>
+
+        <!-- Semester Field -->
+        <div class="form-group">
+            <label htmlFor="semester-input">Current Semester</label>
+            <input 
+                type="number" 
+                id="semester-input" 
+                formControlName="semester"
+                class="form-control"
+                [class.invalid-field]="semesterControl?.touched && semesterControl?.invalid"
+            />
+            <div class="error-msg" *ngIf="semesterControl?.touched && semesterControl?.invalid">
+                <span *ngIf="semesterControl?.errors?.['required']">Semester is required</span>
+                <span *ngIf="semesterControl?.errors?.['min'] || semesterControl?.errors?.['max']">
+                    Semester must be between 1 and 8
+                </span>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button 
+            type="submit" 
+            class="save-btn" 
+            [disabled]="profileForm.invalid"
+        >
+            Update Profile
+        </button>
+    </form>
+
+    <div class="profile-preview" *ngIf="submittedData">
+        <h4>Last Submitted Data</h4>
+        <p><strong>Name:</strong> {{ submittedData.name }}</p>
+        <p><strong>Email:</strong> {{ submittedData.email }}</p>
+        <p><strong>Semester:</strong> Semester {{ submittedData.semester }}</p>
+    </div>
+</div>

@@ -1,0 +1,40 @@
+<section class="courses-section">
+    <div class="section-header">
+        <h2>Featured Courses</h2>
+        <div class="controls">
+            <input 
+                type="text" 
+                class="search-bar" 
+                placeholder="Search courses by name or code..." 
+                [(ngModel)]="searchTerm"
+            />
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div class="loading-state" *ngIf="loading">
+        <div class="spinner"></div>
+        <p>Loading course catalog...</p>
+    </div>
+
+    <!-- Error State -->
+    <div class="error-state" *ngIf="error">
+        <p>{{ error }}</p>
+    </div>
+
+    <!-- Course Cards Grid -->
+    <div class="courses-grid" *ngIf="!loading && !error">
+        <app-course-card 
+            *ngFor="let course of filteredCourses; trackBy: trackByFn"
+            [name]="course.name"
+            [code]="course.code"
+            [credits]="course.credits"
+            [grade]="course.grade"
+        ></app-course-card>
+    </div>
+
+    <!-- Empty State -->
+    <div class="no-results" *ngIf="!loading && !error && filteredCourses.length === 0">
+        No courses found matching "{{ searchTerm }}"
+    </div>
+</section>

@@ -1,0 +1,13 @@
+<header class="site-header">
+    <div class="logo">
+        <a routerLink="/" style="text-decoration: none; color: white;">
+            <span>{{ siteName }}</span>
+        </a>
+    </div>
+    <nav class="nav-menu">
+        <ul>
+            <li><a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">Courses</a></li>
+            <li><a routerLink="/profile" routerLinkActive="active">Profile</a></li>
+        </ul>
+    </nav>
+</header>
